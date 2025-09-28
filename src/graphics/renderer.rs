@@ -1,6 +1,7 @@
 use super::{Color, GraphicsContext};
 use std::iter;
 use std::sync::Arc;
+use wgpu::StoreOp::Store;
 use wgpu::{
     CommandEncoder, LoadOp, RenderPassColorAttachment, RenderPassDescriptor, StoreOp,
     SurfaceTexture, TextureView,
@@ -74,6 +75,33 @@ impl<'a> Frame<'_> {
             timestamp_writes: None,
             occlusion_query_set: None,
         });
+    }
+
+    pub fn render(
+        &mut self,
+        pipeline: &wgpu::RenderPipeline,
+        vertex_buffer: &wgpu::Buffer,
+        num_vertices: u32,
+    ) {
+        let mut render_pass = self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Main Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &self.view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+
+        render_pass.set_pipeline(&pipeline);
+        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+        render_pass.draw(0..num_vertices, 0..1);
     }
 
     pub fn present(self) {

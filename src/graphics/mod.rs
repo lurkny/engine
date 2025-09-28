@@ -1,5 +1,6 @@
 mod color;
 mod context;
+mod pipeline;
 mod renderer;
 
 pub use color::Color;
