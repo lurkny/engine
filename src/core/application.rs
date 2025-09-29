@@ -51,6 +51,9 @@ impl Application {
         if let Some(renderer) = &mut self.renderer {
             if let Some(mut frame) = renderer.begin_frame() {
                 frame.clear(crate::graphics::Color::rgb(0.2, 0.3, 0.8)); // Blue
+
+                frame.draw_circle(0.15, 32, crate::graphics::Color::BLUE);
+
                 frame.present();
             }
         }

@@ -1,4 +1,5 @@
-use super::{Color, GraphicsContext};
+use super::{Color, GraphicsContext, Geometry, GeometryBuilder};
+use super::pipeline::RenderPipeline;
 use std::iter;
 use std::sync::Arc;
 use wgpu::StoreOp::Store;
@@ -11,12 +12,14 @@ use winit::window::Window;
 
 pub struct Renderer {
     context: GraphicsContext,
+    pipeline: RenderPipeline,
 }
 
 impl Renderer {
     pub async fn new(window: Arc<Window>) -> Self {
         let context = GraphicsContext::new(window).await;
-        Self { context }
+        let pipeline = RenderPipeline::new(&context.device, &context.config);
+        Self { context, pipeline }
     }
 
     pub fn begin_frame(&mut self) -> Option<Frame<'_>> {
@@ -38,6 +41,7 @@ impl Renderer {
             view,
             encoder,
             context: &self.context,
+            pipeline: &self.pipeline,
         })
     }
 
@@ -51,6 +55,7 @@ pub struct Frame<'a> {
     view: TextureView,
     encoder: CommandEncoder,
     context: &'a GraphicsContext,
+    pipeline: &'a RenderPipeline,
 }
 
 impl<'a> Frame<'_> {
@@ -77,19 +82,16 @@ impl<'a> Frame<'_> {
         });
     }
 
-    pub fn render(
-        &mut self,
-        pipeline: &wgpu::RenderPipeline,
-        vertex_buffer: &wgpu::Buffer,
-        num_vertices: u32,
-    ) {
+    pub fn draw_geometry(&mut self, geometry: &Geometry) {
+        let (vertex_buffer, index_buffer) = self.pipeline.create_buffers(&self.context.device, geometry);
+
         let mut render_pass = self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Main Render Pass"),
+            label: Some("Shape Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &self.view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    load: wgpu::LoadOp::Load,
                     store: StoreOp::Store,
                 },
                 depth_slice: None,
@@ -99,9 +101,30 @@ impl<'a> Frame<'_> {
             occlusion_query_set: None,
         });
 
-        render_pass.set_pipeline(&pipeline);
+        render_pass.set_pipeline(self.pipeline.get_pipeline());
         render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-        render_pass.draw(0..num_vertices, 0..1);
+        render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        render_pass.draw_indexed(0..geometry.indices.len() as u32, 0, 0..1);
+    }
+
+    pub fn draw_triangle(&mut self, size: f32, color: Color) {
+        let geometry = GeometryBuilder::triangle(size, color);
+        self.draw_geometry(&geometry);
+    }
+
+    pub fn draw_rectangle(&mut self, width: f32, height: f32, color: Color) {
+        let geometry = GeometryBuilder::rectangle(width, height, color);
+        self.draw_geometry(&geometry);
+    }
+
+    pub fn draw_circle(&mut self, radius: f32, segments: u32, color: Color) {
+        let geometry = GeometryBuilder::circle(radius, segments, color);
+        self.draw_geometry(&geometry);
+    }
+
+    pub fn draw_quad(&mut self, size: f32, color: Color) {
+        let geometry = GeometryBuilder::quad(size, color);
+        self.draw_geometry(&geometry);
     }
 
     pub fn present(self) {

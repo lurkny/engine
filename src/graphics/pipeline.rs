@@ -1,16 +1,8 @@
 use wgpu::util::DeviceExt;
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 3],
-    color: [f32; 4],
-}
+use super::geometry::{Geometry, Vertex};
 
 pub struct RenderPipeline {
     pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
 }
 
 impl RenderPipeline {
@@ -73,50 +65,26 @@ impl RenderPipeline {
             cache: None,
         });
 
-        let vertices = [
-            Vertex {
-                position: [-0.5, -0.5, 0.0],
-                color: [1.0, 0.0, 0.0, 1.0],
-            },
-            Vertex {
-                position: [0.5, -0.5, 0.0],
-                color: [0.0, 1.0, 0.0, 1.0],
-            },
-            Vertex {
-                position: [0.5, 0.5, 0.0],
-                color: [0.0, 0.0, 1.0, 1.0],
-            },
-            Vertex {
-                position: [-0.5, 0.5, 0.0],
-                color: [1.0, 1.0, 0.0, 1.0],
-            },
-        ];
+        Self { pipeline }
+    }
 
+    pub fn get_pipeline(&self) -> &wgpu::RenderPipeline {
+        &self.pipeline
+    }
+
+    pub fn create_buffers(&self, device: &wgpu::Device, geometry: &Geometry) -> (wgpu::Buffer, wgpu::Buffer) {
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
+            contents: bytemuck::cast_slice(&geometry.vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        let indices = [0, 1, 2, 0, 2, 3];
-
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&indices),
+            contents: bytemuck::cast_slice(&geometry.indices),
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        Self {
-            pipeline,
-            vertex_buffer,
-            index_buffer,
-        }
-    }
-
-    pub fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
-        render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        render_pass.draw_indexed(0..6, 0, 0..1);
+        (vertex_buffer, index_buffer)
     }
 }
