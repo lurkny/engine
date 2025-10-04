@@ -1,4 +1,4 @@
-use crate::graphics::Renderer;
+use crate::graphics::{Color, Renderer};
 use crate::input::Input;
 use pollster::block_on;
 use std::sync::Arc;
@@ -48,14 +48,15 @@ impl Application {
     pub fn update(&mut self, dt: f64) {}
 
     pub fn render(&mut self) {
-        if let Some(renderer) = &mut self.renderer {
-            if let Some(mut frame) = renderer.begin_frame() {
-                frame.clear(crate::graphics::Color::rgb(0.2, 0.3, 0.8)); // Blue
+        if let Some(renderer) = &mut self.renderer
+            && let Some(mut frame) = renderer.begin_frame()
+        {
+            frame.clear(crate::graphics::Color::rgb(0.2, 0.3, 0.8)); // Blue
 
-                frame.draw_circle(0.15, 32, crate::graphics::Color::BLUE);
+            frame.draw_circle(0.15, 32, crate::graphics::Color::BLUE);
+            frame.draw_quad(0.25, crate::graphics::Color::RED);
 
-                frame.present();
-            }
+            frame.present();
         }
     }
 }

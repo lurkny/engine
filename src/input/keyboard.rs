@@ -16,7 +16,7 @@ impl Keyboard {
 
     pub fn update(&mut self) {
         self.just_released.clear();
-        self.just_released.clear();
+        self.just_pressed.clear();
     }
 
     pub fn process_event(&mut self, event: &KeyEvent) {

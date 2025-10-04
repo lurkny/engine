@@ -1,13 +1,12 @@
-use super::{Color, GraphicsContext, Geometry, GeometryBuilder};
 use super::pipeline::RenderPipeline;
+use super::{Color, Geometry, GeometryBuilder, GraphicsContext};
 use std::iter;
 use std::sync::Arc;
-use wgpu::StoreOp::Store;
 use wgpu::{
     CommandEncoder, LoadOp, RenderPassColorAttachment, RenderPassDescriptor, StoreOp,
     SurfaceTexture, TextureView,
 };
-use winit::dpi::{PhysicalSize, PhysicalUnit};
+use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 pub struct Renderer {
@@ -67,12 +66,7 @@ impl<'a> Frame<'_> {
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: LoadOp::Clear(wgpu::Color {
-                        r: color.r as f64,
-                        g: color.g as f64,
-                        b: color.b as f64,
-                        a: color.a as f64,
-                    }),
+                    load: LoadOp::Clear(color.into()),
                     store: StoreOp::Store,
                 },
             })],
@@ -83,7 +77,8 @@ impl<'a> Frame<'_> {
     }
 
     pub fn draw_geometry(&mut self, geometry: &Geometry) {
-        let (vertex_buffer, index_buffer) = self.pipeline.create_buffers(&self.context.device, geometry);
+        let (vertex_buffer, index_buffer) =
+            self.pipeline.create_buffers(&self.context.device, geometry);
 
         let mut render_pass = self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Shape Render Pass"),

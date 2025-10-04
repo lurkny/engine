@@ -33,7 +33,7 @@ impl GeometryBuilder {
     pub fn triangle(size: f32, color: Color) -> Geometry {
         let height = size * (3.0_f32.sqrt() / 2.0);
         let vertices = vec![
-            Vertex::new([0.0, height / 2.0, 0.0], color),      // Top
+            Vertex::new([0.0, height / 2.0, 0.0], color), // Top
             Vertex::new([-size / 2.0, -height / 2.0, 0.0], color),
             Vertex::new([size / 2.0, -height / 2.0, 0.0], color),
         ];

@@ -1,5 +1,5 @@
-use wgpu::util::DeviceExt;
 use super::geometry::{Geometry, Vertex};
+use wgpu::util::DeviceExt;
 
 pub struct RenderPipeline {
     pipeline: wgpu::RenderPipeline,
@@ -72,7 +72,11 @@ impl RenderPipeline {
         &self.pipeline
     }
 
-    pub fn create_buffers(&self, device: &wgpu::Device, geometry: &Geometry) -> (wgpu::Buffer, wgpu::Buffer) {
+    pub fn create_buffers(
+        &self,
+        device: &wgpu::Device,
+        geometry: &Geometry,
+    ) -> (wgpu::Buffer, wgpu::Buffer) {
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(&geometry.vertices),
