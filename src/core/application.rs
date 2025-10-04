@@ -109,6 +109,12 @@ impl ApplicationHandler for Application {
                     renderer.resize(size);
                 }
             }
+            WindowEvent::CursorMoved { position, .. } => self.input.mouse.move_cursor(position),
+            WindowEvent::MouseInput { state, button, .. } => {
+                self.input.mouse.process_button_event(&state, &button)
+            }
+            WindowEvent::MouseWheel { delta, .. } => self.input.mouse.process_wheel_event(delta),
+
             _ => {}
         }
     }

@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use winit::dpi::PhysicalPosition;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ButtonId, ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 
 #[derive(Default)]
@@ -24,18 +24,10 @@ impl Mouse {
         self.scroll_delta = (0.0, 0.0);
     }
 
-    pub fn process_event(&mut self, event: &WindowEvent) -> Result<(), String> {
-        match &event {
-            WindowEvent::CursorMoved { position, .. } => Ok(self.position = *position),
-            WindowEvent::MouseInput { state, button, .. } => {
-                self.process_button_event(state, button)
-            }
-            WindowEvent::MouseWheel { delta, .. } => Ok(self.process_wheel_event(*delta)),
-            _ => Err(String::from("Unsupported Event")),
-        }
+    pub fn move_cursor(&mut self, pos: PhysicalPosition<f64>) {
+        self.position = pos
     }
-
-    fn process_wheel_event(&mut self, delta: MouseScrollDelta) {
+    pub fn process_wheel_event(&mut self, delta: MouseScrollDelta) {
         self.scroll_delta = match delta {
             MouseScrollDelta::LineDelta(x, y) => {
                 (x * Self::SCROLL_LINE_HEIGHT, y * Self::SCROLL_LINE_HEIGHT)
@@ -44,11 +36,7 @@ impl Mouse {
         };
     }
 
-    fn process_button_event(
-        &mut self,
-        state: &ElementState,
-        button: &MouseButton,
-    ) -> Result<(), String> {
+    pub fn process_button_event(&mut self, state: &ElementState, button: &MouseButton) {
         match state {
             ElementState::Pressed => {
                 self.curr_pressed.insert(*button);
@@ -59,8 +47,6 @@ impl Mouse {
                 self.just_released.insert(*button);
             }
         }
-
-        Ok(())
     }
 
     pub fn position(&self) -> (f64, f64) {
