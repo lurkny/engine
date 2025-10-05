@@ -52,12 +52,11 @@ impl Application {
         if let Some(renderer) = &mut self.renderer
             && let Some(mut frame) = renderer.begin_frame()
         {
-            frame.clear(crate::graphics::Color::rgb(0.2, 0.3, 0.8)); // Blue
+            frame.clear(crate::graphics::Color::rgb(0.2, 0.3, 0.8));
 
-            let circle_transform = Transform::new(Vec2::new(0.0, 0.0));
-            let quad_transform = Transform::new(Vec2::new(300.0, 300.0));
-
-            frame.draw_circle(50.0, 64, Color::BLUE, circle_transform);
+            let circle_transform = Transform::new(Vec2::new(200.0, 300.0));
+            let quad_transform = Transform::new(Vec2::new(500.0, 300.0));
+            frame.draw_circle(50.0, 64, Color::WHITE, circle_transform);
             frame.draw_quad(100.0, Color::RED, quad_transform);
 
             frame.present();
