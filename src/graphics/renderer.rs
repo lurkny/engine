@@ -1,14 +1,15 @@
 use super::pipeline::RenderPipeline;
-use super::{Color, Geometry, GeometryBuilder, GraphicsContext, Vertex};
+use super::{Color, Geometry, GraphicsContext, Vertex};
 use crate::graphics::transform::Transform;
 use crate::graphics::uniform::{TransformUniform, UniformPool};
 use glam::Mat4;
+use std::f32::consts::PI;
 use std::iter;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 use wgpu::{
-    CommandEncoder, LoadOp, RenderPassColorAttachment, RenderPassDescriptor,
-    StoreOp, SurfaceTexture, TextureView,
+    CommandEncoder, LoadOp, RenderPassColorAttachment, RenderPassDescriptor, StoreOp,
+    SurfaceTexture, TextureView,
 };
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
@@ -60,7 +61,9 @@ impl Renderer {
             pipeline: &self.pipeline,
             uniform_pool: &mut self.uniform_pool,
             projection: self.projection,
-            draw_queue: Vec::new(),
+            vertex_stream: Vec::with_capacity(10000),
+            index_stream: Vec::with_capacity(30000),
+            draw_commands: Vec::with_capacity(100),
         })
     }
 
@@ -72,14 +75,19 @@ impl Renderer {
     }
 }
 
-
-
 #[derive(Debug, Clone)]
-pub struct DrawCommand {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u32>,
+pub struct DrawCommand<'a> {
+    pub geometry: &'a Geometry,
     pub transform: Transform,
 }
+
+struct StreamedDraw {
+    vertex_offset: u32,
+    index_offset: u32,
+    index_count: u32,
+    transform: Transform,
+}
+
 #[derive(Debug)]
 struct DrawCall {
     bind_group_index: usize,
@@ -96,10 +104,12 @@ pub struct Frame<'a> {
     pipeline: &'a RenderPipeline,
     uniform_pool: &'a mut UniformPool,
     projection: Mat4,
-    draw_queue: Vec<DrawCommand>,
+    vertex_stream: Vec<Vertex>,
+    index_stream: Vec<u32>,
+    draw_commands: Vec<StreamedDraw>,
 }
 
-impl<'a> Frame<'_> {
+impl<'a> Frame<'a> {
     pub fn clear(&mut self, color: Color) {
         self.encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("Clear Pass"),
@@ -119,41 +129,28 @@ impl<'a> Frame<'_> {
     }
 
     pub fn draw_geometry(&mut self, geometry: &Geometry, transform: Transform) {
-        self.draw_queue.push(DrawCommand {
-            vertices: geometry.vertices.clone(),
-            indices: geometry.indices.clone(),
+        let vertex_offset = self.vertex_stream.len() as u32;
+        let index_offset = self.index_stream.len() as u32;
+
+        self.vertex_stream.extend_from_slice(&geometry.vertices);
+
+        for &idx in &geometry.indices {
+            self.index_stream.push(idx + vertex_offset);
+        }
+
+        self.draw_commands.push(StreamedDraw {
+            vertex_offset,
+            index_offset,
+            index_count: geometry.indices.len() as u32,
             transform,
         });
     }
 
     pub fn present(mut self) {
-        let mut all_vertices = Vec::new();
-        let mut all_indices = Vec::new();
-        let mut draw_calls = Vec::new();
-
-        let mut vertex_offset = 0u32;
-        let mut index_offset = 0u32;
-
-        for cmd in &self.draw_queue {
-            let uniform = TransformUniform::new(cmd.transform.to_matrix(), self.projection);
-            let (bind_group_idx, offset) =
-                self.uniform_pool.allocate(&self.context.queue, &uniform);
-
-            all_vertices.extend_from_slice(&cmd.vertices);
-
-            for &idx in &cmd.indices {
-                all_indices.push(idx + vertex_offset);
-            }
-
-            draw_calls.push(DrawCall {
-                bind_group_index: bind_group_idx,
-                uniform_offset: offset,
-                index_start: index_offset,
-                index_count: cmd.indices.len() as u32,
-            });
-
-            vertex_offset += cmd.vertices.len() as u32;
-            index_offset += cmd.indices.len() as u32;
+        if self.vertex_stream.is_empty() {
+            self.context.queue.submit(iter::once(self.encoder.finish()));
+            self.surface_texture.present();
+            return;
         }
 
         let vertex_buffer =
@@ -161,17 +158,33 @@ impl<'a> Frame<'_> {
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Frame Vertex Buffer"),
-                    contents: bytemuck::cast_slice(&all_vertices),
+                    contents: bytemuck::cast_slice(&self.vertex_stream),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
+
         let index_buffer =
             self.context
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Frame Index Buffer"),
-                    contents: bytemuck::cast_slice(&all_indices),
+                    contents: bytemuck::cast_slice(&self.index_stream),
                     usage: wgpu::BufferUsages::INDEX,
                 });
+
+        let mut draw_calls = Vec::with_capacity(self.draw_commands.len());
+
+        for cmd in &self.draw_commands {
+            let uniform = TransformUniform::new(cmd.transform.to_matrix(), self.projection);
+            let (bind_group_idx, offset) =
+                self.uniform_pool.allocate(&self.context.queue, &uniform);
+
+            draw_calls.push(DrawCall {
+                bind_group_index: bind_group_idx,
+                uniform_offset: offset,
+                index_start: cmd.index_offset,
+                index_count: cmd.index_count,
+            });
+        }
 
         let mut render_pass = self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Main Render Pass"),
@@ -199,7 +212,6 @@ impl<'a> Frame<'_> {
                 &self.uniform_pool.bind_groups[draw.bind_group_index],
                 &[draw.uniform_offset],
             );
-
             render_pass.draw_indexed(
                 draw.index_start..(draw.index_start + draw.index_count),
                 0,
@@ -216,22 +228,91 @@ impl<'a> Frame<'_> {
     }
 
     pub fn draw_triangle(&mut self, size: f32, color: Color, transform: Transform) {
-        let geometry = GeometryBuilder::triangle(size, color);
-        self.draw_geometry(&geometry, transform);
+        let vertex_offset = self.vertex_stream.len() as u32;
+        let index_offset = self.index_stream.len() as u32;
+
+        let height = size * (3.0_f32.sqrt() / 2.0);
+
+        self.vertex_stream
+            .push(Vertex::new([0.0, height / 2.0, 0.0], color));
+        self.vertex_stream
+            .push(Vertex::new([-size / 2.0, -height / 2.0, 0.0], color));
+        self.vertex_stream
+            .push(Vertex::new([size / 2.0, -height / 2.0, 0.0], color));
+
+        self.index_stream
+            .extend_from_slice(&[vertex_offset, vertex_offset + 1, vertex_offset + 2]);
+
+        self.draw_commands.push(StreamedDraw {
+            vertex_offset,
+            index_offset,
+            index_count: 3,
+            transform,
+        });
     }
 
     pub fn draw_rectangle(&mut self, width: f32, height: f32, color: Color, transform: Transform) {
-        let geometry = GeometryBuilder::rectangle(width, height, color);
-        self.draw_geometry(&geometry, transform);
+        let vertex_offset = self.vertex_stream.len() as u32;
+        let index_offset = self.index_stream.len() as u32;
+
+        let half_width = width / 2.0;
+        let half_height = height / 2.0;
+
+        self.vertex_stream
+            .push(Vertex::new([-half_width, -half_height, 0.0], color));
+        self.vertex_stream
+            .push(Vertex::new([half_width, -half_height, 0.0], color));
+        self.vertex_stream
+            .push(Vertex::new([half_width, half_height, 0.0], color));
+        self.vertex_stream
+            .push(Vertex::new([-half_width, half_height, 0.0], color));
+
+        self.index_stream.extend_from_slice(&[
+            vertex_offset,
+            vertex_offset + 1,
+            vertex_offset + 2,
+            vertex_offset,
+            vertex_offset + 2,
+            vertex_offset + 3,
+        ]);
+
+        self.draw_commands.push(StreamedDraw {
+            vertex_offset,
+            index_offset,
+            index_count: 6,
+            transform,
+        });
     }
 
     pub fn draw_circle(&mut self, radius: f32, segments: u32, color: Color, transform: Transform) {
-        let geometry = GeometryBuilder::circle(radius, segments, color);
-        self.draw_geometry(&geometry, transform);
+        let vertex_offset = self.vertex_stream.len() as u32;
+        let index_offset = self.index_stream.len() as u32;
+
+        self.vertex_stream.push(Vertex::new([0.0, 0.0, 0.0], color));
+        for i in 0..segments {
+            let angle = 2.0 * PI * i as f32 / segments as f32;
+            self.vertex_stream.push(Vertex::new(
+                [radius * angle.cos(), radius * angle.sin(), 0.0],
+                color,
+            ));
+        }
+
+        for i in 0..segments {
+            let next = if i + 1 == segments { 0 } else { i + 1 };
+            self.index_stream.push(vertex_offset);
+            self.index_stream.push(vertex_offset + i + 1);
+            self.index_stream.push(vertex_offset + next + 1);
+        }
+
+        self.draw_commands.push(StreamedDraw {
+            vertex_offset,
+            index_offset,
+            index_count: segments * 3,
+            transform,
+        });
     }
 
     pub fn draw_quad(&mut self, size: f32, color: Color, transform: Transform) {
-        let geometry = GeometryBuilder::quad(size, color);
-        self.draw_geometry(&geometry, transform);
+        self.draw_rectangle(size, size, color, transform);
     }
 }

@@ -8,6 +8,6 @@ mod uniform;
 
 pub use color::Color;
 use context::GraphicsContext;
-pub use geometry::{Geometry, GeometryBuilder, Vertex};
+pub use geometry::{Geometry, Vertex};
 pub use renderer::Renderer;
 pub use transform::Transform;

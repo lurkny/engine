@@ -1,6 +1,6 @@
-use std::num::NonZeroU64;
 use bytemuck::{Pod, Zeroable};
 use glam::Mat4;
+use std::num::NonZeroU64;
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
