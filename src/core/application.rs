@@ -1,9 +1,9 @@
 use crate::graphics::{Color, Renderer, Transform};
 use crate::input::Input;
+use glam::Vec2;
 use pollster::block_on;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use glam::Vec2;
 use tracing::info;
 use winit::dpi::LogicalSize;
 use winit::event_loop::ControlFlow;
