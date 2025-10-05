@@ -3,6 +3,7 @@ use wgpu::util::DeviceExt;
 
 pub struct RenderPipeline {
     pipeline: wgpu::RenderPipeline,
+    bind_group_layout: wgpu::BindGroupLayout
 }
 
 impl RenderPipeline {
@@ -12,9 +13,23 @@ impl RenderPipeline {
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
 
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor{
+            label: Some("Transform Bind Group Layout"),
+            entries: &[wgpu::BindGroupLayoutEntry{
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None
+                },
+                count: None,
+            }]
+        });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Pipeline Layout"),
-            bind_group_layouts: &[], //TODO
+            bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -65,11 +80,15 @@ impl RenderPipeline {
             cache: None,
         });
 
-        Self { pipeline }
+        Self { pipeline, bind_group_layout }
     }
 
     pub fn get_pipeline(&self) -> &wgpu::RenderPipeline {
         &self.pipeline
+    }
+
+    pub fn get_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.bind_group_layout
     }
 
     pub fn create_buffers(

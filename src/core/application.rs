@@ -1,8 +1,9 @@
-use crate::graphics::{Color, Renderer};
+use crate::graphics::{Color, Renderer, Transform};
 use crate::input::Input;
 use pollster::block_on;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use glam::Vec2;
 use tracing::info;
 use winit::dpi::LogicalSize;
 use winit::event_loop::ControlFlow;
@@ -53,8 +54,11 @@ impl Application {
         {
             frame.clear(crate::graphics::Color::rgb(0.2, 0.3, 0.8)); // Blue
 
-            frame.draw_circle(0.15, 32, crate::graphics::Color::BLUE);
-            frame.draw_quad(0.25, crate::graphics::Color::RED);
+            let circle_transform = Transform::new(Vec2::new(0.0, 0.0));
+            let quad_transform = Transform::new(Vec2::new(300.0, 300.0));
+
+            frame.draw_circle(50.0, 64, Color::BLUE, circle_transform);
+            frame.draw_quad(100.0, Color::RED, quad_transform);
 
             frame.present();
         }

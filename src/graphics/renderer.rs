@@ -1,3 +1,4 @@
+use std::io::pipe;
 use super::pipeline::RenderPipeline;
 use super::{Color, Geometry, GeometryBuilder, GraphicsContext};
 use std::iter;
@@ -8,17 +9,31 @@ use wgpu::{
 };
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
+use crate::graphics::transform::Transform;
+use crate::graphics::uniform::{TransformUniform, UniformBuffer};
+use glam::Mat4;
 
 pub struct Renderer {
     context: GraphicsContext,
     pipeline: RenderPipeline,
+    uniform_buffer: UniformBuffer,
+    projection: Mat4
 }
 
 impl Renderer {
     pub async fn new(window: Arc<Window>) -> Self {
         let context = GraphicsContext::new(window).await;
         let pipeline = RenderPipeline::new(&context.device, &context.config);
-        Self { context, pipeline }
+        let uniform_buffer = UniformBuffer::new(
+            &context.device,
+            pipeline.get_bind_group_layout()
+        );
+
+        let width = context.config.width as f32;
+        let height = context.config.height as f32;
+        let projection = Mat4::orthographic_rh(0.0, width, height, 0.0, -1.0, 1.0);
+
+        Self { context, pipeline, uniform_buffer, projection }
     }
 
     pub fn begin_frame(&mut self) -> Option<Frame<'_>> {
@@ -41,11 +56,16 @@ impl Renderer {
             encoder,
             context: &self.context,
             pipeline: &self.pipeline,
+            uniform_buffer: &self.uniform_buffer,
+            projection: self.projection
         })
     }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
         self.context.resize(new_size);
+        let width = new_size.width as f32;
+        let height = new_size.height as f32;
+        self.projection = Mat4::orthographic_rh(0.0, width, height, 0.0, -1.0, 1.0);
     }
 }
 
@@ -55,6 +75,8 @@ pub struct Frame<'a> {
     encoder: CommandEncoder,
     context: &'a GraphicsContext,
     pipeline: &'a RenderPipeline,
+    uniform_buffer: &'a UniformBuffer,
+    projection: Mat4
 }
 
 impl<'a> Frame<'_> {
@@ -76,7 +98,12 @@ impl<'a> Frame<'_> {
         });
     }
 
-    pub fn draw_geometry(&mut self, geometry: &Geometry) {
+    pub fn draw_geometry(&mut self, geometry: &Geometry, transform: Transform) {
+        self.context.queue.write_buffer(
+            &self.uniform_buffer.buffer,
+            0,
+            bytemuck::cast_slice(&[TransformUniform::new(transform.to_matrix(), self.projection)])
+        );
         let (vertex_buffer, index_buffer) =
             self.pipeline.create_buffers(&self.context.device, geometry);
 
@@ -97,29 +124,30 @@ impl<'a> Frame<'_> {
         });
 
         render_pass.set_pipeline(self.pipeline.get_pipeline());
+        render_pass.set_bind_group(0, &self.uniform_buffer.bind_group, &[]);
         render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
         render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         render_pass.draw_indexed(0..geometry.indices.len() as u32, 0, 0..1);
     }
 
-    pub fn draw_triangle(&mut self, size: f32, color: Color) {
+    pub fn draw_triangle(&mut self, size: f32, color: Color, transform: Transform) {
         let geometry = GeometryBuilder::triangle(size, color);
-        self.draw_geometry(&geometry);
+        self.draw_geometry(&geometry, transform);
     }
 
-    pub fn draw_rectangle(&mut self, width: f32, height: f32, color: Color) {
+    pub fn draw_rectangle(&mut self, width: f32, height: f32, color: Color, transform: Transform) {
         let geometry = GeometryBuilder::rectangle(width, height, color);
-        self.draw_geometry(&geometry);
+        self.draw_geometry(&geometry, transform);
     }
 
-    pub fn draw_circle(&mut self, radius: f32, segments: u32, color: Color) {
+    pub fn draw_circle(&mut self, radius: f32, segments: u32, color: Color, transform: Transform) {
         let geometry = GeometryBuilder::circle(radius, segments, color);
-        self.draw_geometry(&geometry);
+        self.draw_geometry(&geometry, transform);
     }
 
-    pub fn draw_quad(&mut self, size: f32, color: Color) {
+    pub fn draw_quad(&mut self, size: f32, color: Color, transform: Transform) {
         let geometry = GeometryBuilder::quad(size, color);
-        self.draw_geometry(&geometry);
+        self.draw_geometry(&geometry, transform);
     }
 
     pub fn present(self) {
