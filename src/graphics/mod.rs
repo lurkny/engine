@@ -9,5 +9,5 @@ mod uniform;
 pub use color::Color;
 use context::GraphicsContext;
 pub use geometry::{Geometry, Vertex};
-pub use renderer::Renderer;
+pub use renderer::{Frame, Renderer};
 pub use transform::Transform;

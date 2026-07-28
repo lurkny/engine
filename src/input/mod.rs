@@ -18,5 +18,6 @@ impl Input {
     }
     pub fn update(&mut self) {
         self.keyboard.update();
+        self.mouse.update();
     }
 }

@@ -1,6 +1,6 @@
-use crate::graphics::{Color, Renderer, Transform};
+use crate::core::game::Game;
+use crate::graphics::{Color, Renderer};
 use crate::input::Input;
-use glam::Vec2;
 use pollster::block_on;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -17,6 +17,7 @@ use winit::{
 pub struct Application {
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
+    game: Box<dyn Game>,
     input: Input,
     title: String,
     size: (u32, u32),
@@ -26,10 +27,16 @@ pub struct Application {
 }
 
 impl Application {
-    pub fn new(title: impl Into<String>, width: u32, height: u32) -> Self {
+    pub fn new(
+        title: impl Into<String>,
+        width: u32,
+        height: u32,
+        game: impl Game + 'static,
+    ) -> Self {
         Self {
             window: None,
             renderer: None,
+            game: Box::new(game),
             title: title.into(),
             size: (width, height),
             last_update: Instant::now(),
@@ -46,19 +53,16 @@ impl Application {
         Ok(())
     }
 
-    pub fn update(&mut self, dt: f64) {}
+    pub fn update(&mut self, dt: f64) {
+        self.game.update(&self.input, dt);
+    }
 
     pub fn render(&mut self) {
         if let Some(renderer) = &mut self.renderer
             && let Some(mut frame) = renderer.begin_frame()
         {
-            frame.clear(crate::graphics::Color::rgb(0.2, 0.3, 0.8));
-
-            let circle_transform = Transform::new(Vec2::new(200.0, 300.0));
-            let quad_transform = Transform::new(Vec2::new(500.0, 300.0));
-            frame.draw_circle(50.0, 64, Color::WHITE, circle_transform);
-            frame.draw_quad(100.0, Color::RED, quad_transform);
-
+            frame.clear(Color::rgb(0.1, 0.1, 0.15));
+            self.game.render(&mut frame);
             frame.present();
         }
     }
@@ -122,9 +126,7 @@ impl ApplicationHandler for Application {
         }
     }
 
-    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        self.input.update();
-
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         let now = Instant::now();
         let delta = now - self.last_update;
         self.last_update = now;
@@ -136,6 +138,10 @@ impl ApplicationHandler for Application {
         }
 
         self.render();
+
+        // Clear per-frame input state (just_pressed / just_released / scroll)
+        // after the game has had a chance to read it.
+        self.input.update();
 
         if let Some(window) = &self.window {
             window.request_redraw();

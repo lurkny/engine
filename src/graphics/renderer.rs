@@ -40,7 +40,17 @@ impl Renderer {
     }
 
     pub fn begin_frame(&mut self) -> Option<Frame<'_>> {
-        let surface_texture = self.context.surface.get_current_texture().ok()?;
+        let surface_texture = match self.context.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(texture)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(texture) => texture,
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                self.context
+                    .surface
+                    .configure(&self.context.device, &self.context.config);
+                return None;
+            }
+            _ => return None,
+        };
 
         let view = surface_texture
             .texture
@@ -71,7 +81,8 @@ impl Renderer {
         self.context.resize(new_size);
         let width = new_size.width as f32;
         let height = new_size.height as f32;
-        self.projection = Mat4::orthographic_rh(0.0, width, height, 0.0, -1.0, 1.0);
+        self.projection =
+            glam::camera::rh::proj::directx::orthographic(0.0, width, height, 0.0, -1.0, 1.0);
     }
 }
 
@@ -125,6 +136,7 @@ impl<'a> Frame<'a> {
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
+            multiview_mask: None,
         });
     }
 
@@ -149,7 +161,7 @@ impl<'a> Frame<'a> {
     pub fn present(mut self) {
         if self.vertex_stream.is_empty() {
             self.context.queue.submit(iter::once(self.encoder.finish()));
-            self.surface_texture.present();
+            self.context.queue.present(self.surface_texture);
             return;
         }
 
@@ -200,6 +212,7 @@ impl<'a> Frame<'a> {
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
+            multiview_mask: None,
         });
 
         render_pass.set_pipeline(self.pipeline.get_pipeline());
@@ -222,7 +235,7 @@ impl<'a> Frame<'a> {
         drop(render_pass);
 
         self.context.queue.submit(iter::once(self.encoder.finish()));
-        self.surface_texture.present();
+        self.context.queue.present(self.surface_texture);
 
         self.uniform_pool.next_frame();
     }
